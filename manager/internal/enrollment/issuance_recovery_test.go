@@ -36,7 +36,7 @@ func TestPostgresExpiredLeaseFencesStaleSigner(t *testing.T) {
 		t.Fatal(err)
 	}
 	issuer, csr := testIssuer(t)
-	store := SQLStore{DB: db}
+	store := testSQLStore(t, db)
 	token, err := store.IssueToken(ctx, randomUUID(t), project, "test", time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestPostgresSigningFailureReleasesLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	issuer, csr := testIssuer(t)
-	store := SQLStore{DB: db}
+	store := testSQLStore(t, db)
 	token, err := store.IssueToken(ctx, randomUUID(t), project, "test", time.Minute)
 	if err != nil {
 		t.Fatal(err)
