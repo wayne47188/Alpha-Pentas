@@ -63,7 +63,7 @@ jobs:
       - name: Run SQL transaction invariants
         run: bash tests/integration/enrollment_postgres.sh
       - name: Run Go PostgreSQL enrollment integration
-        run: go test -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestPostgresEnrollmentLifecycle$' -v
+        run: go test -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestPostgres' -v
   console:
     name: Console / typecheck and build
     runs-on: ubuntu-latest
