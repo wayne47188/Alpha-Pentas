@@ -33,7 +33,7 @@ func TestPostgresCertificateRevocationEnforced(t *testing.T) {
 	if _, err = db.ExecContext(ctx, "INSERT INTO projects(id,tenant_id,name) VALUES($1,$2,'revocation-test')", project, tenant); err != nil {
 		t.Fatal(err)
 	}
-	store := SQLStore{DB: db}
+	store := testSQLStore(t, db)
 	issuer, csr := testIssuer(t)
 	token, err := store.IssueToken(ctx, randomUUID(t), project, "test", time.Minute)
 	if err != nil {
