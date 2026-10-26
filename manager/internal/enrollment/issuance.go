@@ -3,6 +3,7 @@ package enrollment
 import (
  "context"
  "crypto/sha256"
+ "crypto/subtle"
  "crypto/x509"
  "database/sql"
  "errors"
@@ -40,7 +41,7 @@ func (s SQLStore) IssueClaim(ctx context.Context, claimID, projectID, certID, is
  WHERE id=$1 AND project_id=$2 FOR UPDATE`,claimID,projectID).Scan(&agentID,&state,&storedDigest,&existingCertID)
  if errors.Is(err,sql.ErrNoRows){return out,ErrInvalid}
  if err!=nil{return out,err}
- if len(storedDigest)!=len(digest)||sha256.Sum256(storedDigest)!=sha256.Sum256(digest[:]){return out,ErrInvalid}
+ if len(storedDigest)!=len(digest)||subtle.ConstantTimeCompare(storedDigest,digest[:])!=1{return out,ErrInvalid}
  if state=="issued" && existingCertID.Valid {
   err=tx.QueryRowContext(ctx,`SELECT certificate_der,serial_number FROM agent_certificates
  WHERE id=$1 AND agent_id=$2 AND revoked_at IS NULL`,existingCertID.String,agentID).Scan(&out.CertificateDER,&out.Serial)
@@ -55,11 +56,13 @@ func (s SQLStore) IssueClaim(ctx context.Context, claimID, projectID, certID, is
  (id,agent_id,issuer_key_id,serial_number,sha256_fingerprint,not_before,not_after,certificate_der)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,certID,agentID,issuerKeyID,issued.Serial,issued.Fingerprint[:],cert.NotBefore,cert.NotAfter,issued.CertificateDER)
  if err!=nil{return out,err}
- _,err=tx.ExecContext(ctx,`UPDATE enrollment_claims SET state='issued',issued_at=now(),certificate_id=$2
+ claimUpdate,err:=tx.ExecContext(ctx,`UPDATE enrollment_claims SET state='issued',issued_at=now(),certificate_id=$2
  WHERE id=$1 AND state='pending'`,claimID,certID)
  if err!=nil{return out,err}
- _,err=tx.ExecContext(ctx,`UPDATE agents SET state='active',enrolled_at=now() WHERE id=$1 AND project_id=$2 AND state='pending'`,agentID,projectID)
+ claimRows,err:=claimUpdate.RowsAffected();if err!=nil{return out,err};if claimRows!=1{return out,ErrClaimNotPending}
+ agentUpdate,err:=tx.ExecContext(ctx,`UPDATE agents SET state='active',enrolled_at=now() WHERE id=$1 AND project_id=$2 AND state='pending'`,agentID,projectID)
  if err!=nil{return out,err}
+ agentRows,err:=agentUpdate.RowsAffected();if err!=nil{return out,err};if agentRows!=1{return out,ErrClaimNotPending}
  if err=tx.Commit();err!=nil{return out,err}
  return IssuanceResult{CertificateDER:issued.CertificateDER,Serial:issued.Serial},nil
 }
