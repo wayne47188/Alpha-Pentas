@@ -1,0 +1,95 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go / format, vet, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify gofmt (never mutate source in CI)
+        run: |
+          files="$(gofmt -l manager agent cli)"
+          if [ -n "$files" ]; then
+            printf 'Run gofmt on:\n%s\n' "$files"
+            exit 1
+          fi
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests with race detector
+        run: go test -race -count=1 ./...
+
+  postgres:
+    name: PostgreSQL / schema invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: alpha
+          POSTGRES_PASSWORD: alpha_ci_only
+          POSTGRES_DB: alpha_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U alpha -d alpha_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://alpha:alpha_ci_only@127.0.0.1:5432/alpha_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - name: PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - name: Run isolated transaction tests
+        run: bash tests/integration/enrollment_postgres.sh
+
+  console:
+    name: Console / typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # TODO: add committed package-lock.json and replace npm install with npm ci.
+      - name: Install dependencies (temporary until lockfile)
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Typecheck and build
+        run: npm run build
+
+  security:
+    name: Supply chain / secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
