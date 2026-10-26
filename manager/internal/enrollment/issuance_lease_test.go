@@ -3,7 +3,6 @@ package enrollment
 import (
  "context"
  "crypto"
- "crypto/rand"
  "crypto/x509"
  "database/sql"
  "errors"
@@ -13,7 +12,6 @@ import (
  "testing"
  "time"
 
- "github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
  _ "github.com/lib/pq"
 )
 
@@ -39,11 +37,10 @@ func TestPostgresSigningDoesNotHoldRowLock(t *testing.T) {
  defer db.Close()
  db.SetMaxOpenConns(4)
  ctx,cancel:=context.WithTimeout(context.Background(),20*time.Second);defer cancel()
- tenant,project,agent,claim:=randomUUID(t),randomUUID(t),randomUUID(t),randomUUID(t)
+ tenant,project,claim:=randomUUID(t),randomUUID(t),randomUUID(t)
  for _,v:=range []struct{q string; a []any}{
   {"INSERT INTO tenants(id,name) VALUES($1,'lease-test')",[]any{tenant}},
   {"INSERT INTO projects(id,tenant_id,name) VALUES($1,$2,'lease-test')",[]any{project,tenant}},
-  {"INSERT INTO agents(id,project_id,state) VALUES($1,$2,'pending')",[]any{agent,project}},
  }{if _,err=db.ExecContext(ctx,v.q,v.a...);err!=nil{t.Fatal(err)}}
  issuer,csr:=testIssuer(t)
  token,err:=(SQLStore{DB:db}).IssueToken(ctx,randomUUID(t),project,"test",time.Minute)
@@ -75,6 +72,4 @@ func TestPostgresSigningDoesNotHoldRowLock(t *testing.T) {
  if err!=nil{t.Fatal(err)}
  if _,err=x509.ParseCertificate(other.CertificateDER);err!=nil{t.Fatal(err)}
  // Prevent unused import regressions.
- _=rand.Reader
- _=identity.Result{}
 }
