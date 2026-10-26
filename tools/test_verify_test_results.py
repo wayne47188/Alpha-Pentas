@@ -21,6 +21,7 @@ class VerifyEvidenceTests(unittest.TestCase):
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
             {"Test": "TestPostgresCertificateRevocationEnforced", "Action": "pass"},
+            {"Test": "TestPostgresSigningFailureReleasesLease", "Action": "pass"},
         ]), 0)
 
     def test_skipped_fails(self):
@@ -29,6 +30,7 @@ class VerifyEvidenceTests(unittest.TestCase):
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
             {"Test": "TestPostgresCertificateRevocationEnforced", "Action": "pass"},
+            {"Test": "TestPostgresSigningFailureReleasesLease", "Action": "pass"},
         ]), 1)
 
     def test_missing_fails(self):
@@ -43,6 +45,7 @@ class VerifyEvidenceTests(unittest.TestCase):
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
             {"Test": "TestPostgresCertificateRevocationEnforced", "Action": "pass"},
+            {"Test": "TestPostgresSigningFailureReleasesLease", "Action": "pass"},
         ]), 1)
 
 
