@@ -32,6 +32,8 @@ jobs:
         run: go vet ./...
       - name: Unit tests (race)
         run: go test -race -count=1 ./...
+      - name: Ensure Go checks did not modify tracked files
+        run: git diff --exit-code
   postgres:
     name: PostgreSQL / schema invariants and Go integration
     runs-on: ubuntu-latest
@@ -69,6 +71,8 @@ jobs:
           set -o pipefail
           go test -json -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestPostgres' | tee /tmp/go-integration.json
           python3 tools/verify_test_results.py /tmp/go-integration.json
+      - name: Ensure PostgreSQL tests did not modify tracked files
+        run: git diff --exit-code
   console:
     name: Console / typecheck and build
     runs-on: ubuntu-latest
@@ -87,16 +91,8 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Typecheck and build
         run: npm run build
-  immutable-checkout:
-    name: CI / checkout must remain unchanged
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: Prevent untracked or modified sources after verification
-        run: |
-          git diff --exit-code
-          test -z "$(git ls-files --others --exclude-standard)"
+      - name: Ensure frontend checks did not modify tracked files
+        run: git diff --exit-code
   security:
     name: Supply chain / secret scan
     runs-on: ubuntu-latest
