@@ -13,6 +13,7 @@ REQUIRED = {
     "TestPostgresSigningDoesNotHoldRowLock",
     "TestPostgresExpiredLeaseFencesStaleSigner",
     "TestPostgresCertificateRevocationEnforced",
+    "TestPostgresCertificateScopeAndSuspension",
     "TestPostgresSigningFailureReleasesLease",
 }
 
