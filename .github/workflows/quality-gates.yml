@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
       - name: Verify gofmt (never mutate source in CI)
         run: |
           files="$(gofmt -l manager agent cli)"
@@ -75,9 +75,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # TODO: add committed package-lock.json and replace npm install with npm ci.
-      - name: Install dependencies (temporary until lockfile)
-        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Install pinned dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Typecheck and build
         run: npm run build
 
