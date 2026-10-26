@@ -68,6 +68,9 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 	if s.DB == nil {
 		return empty, errors.New("nil database")
 	}
+	if s.SigningPool == nil {
+		return empty, ErrSigningPool
+	}
 	if claimID == "" || projectID == "" || certID == "" || issuerKeyID == "" || len(csrDER) == 0 {
 		return empty, ErrInvalid
 	}
@@ -98,7 +101,9 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 
 	// No DB lock is held during signing. A slow/failed signer cannot exhaust
 	// the pool through lock wait chains. The lease fences late results.
-	issued, err := issuer.Issue(csrDER, projectID, agentID, 7*24*time.Hour)
+	issued, err := s.SigningPool.Sign(ctx, func() (identity.Result, error) {
+		return issuer.Issue(csrDER, projectID, agentID, 7*24*time.Hour)
+	})
 	if err != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
