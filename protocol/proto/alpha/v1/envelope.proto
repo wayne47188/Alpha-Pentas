@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package alpha.v1;
+option go_package = "github.com/wayne47188/Alpha-Pentas/protocol/gen/alpha/v1;alphav1";
+
+// Draft, versioned schema. No operational remote-control methods in P0.
+message Envelope {
+  string message_id = 1;
+  string project_id = 2;
+  string source_agent_id = 3;
+  uint64 sequence_number = 4;
+  bytes payload_sha256 = 5;
+  int64 created_at_unix_ms = 6;
+  oneof payload {
+    Heartbeat heartbeat = 10;
+    DeliveryReceipt receipt = 11;
+  }
+}
+
+message Heartbeat {
+  string agent_version = 1;
+  int64 observed_at_unix_ms = 2;
+}
+
+message DeliveryReceipt {
+  string message_id = 1;
+  Stage stage = 2;
+  enum Stage {
+    STAGE_UNSPECIFIED = 0;
+    RELAY_RECEIVED = 1;
+    MANAGER_DURABLE = 2;
+  }
+}
+
+service AgentTransport {
+  // Reserved contract. Requires ADR-002 enrollment and mTLS before implementation.
+  rpc Connect(stream Envelope) returns (stream Envelope);
+}
