@@ -12,19 +12,19 @@ type Action string
 const (
 	IssueEnrollmentToken Action = "enrollment.token.issue"
 	ReadEnrollmentStatus Action = "enrollment.status.read"
-	ManageAgent Action = "agent.manage"
+	ManageAgent          Action = "agent.manage"
 )
 
 type Principal struct {
-	ID string
-	TenantID string
+	ID            string
+	TenantID      string
 	Authenticated bool
 }
 
 type Scope struct {
-	TenantID string
+	TenantID  string
 	ProjectID string
-	Action Action
+	Action    Action
 }
 
 // GrantStore retrieves scoped grants from the authoritative authorization
@@ -33,7 +33,9 @@ type GrantStore interface {
 	HasGrant(context.Context, string, string, string, Action) (bool, error)
 }
 
-type Authorizer struct { Grants GrantStore }
+type Authorizer struct {
+	Grants GrantStore
+}
 
 // Check always binds principal, tenant, project and operation together.
 // Do not trust tenant/project from client-controlled headers or JWT role text
