@@ -21,6 +21,7 @@ class VerifyEvidenceTests(unittest.TestCase):
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
             {"Test": "TestPostgresCertificateRevocationEnforced", "Action": "pass"},
+            {"Test": "TestPostgresCertificateScopeAndSuspension", "Action": "pass"},
             {"Test": "TestPostgresSigningFailureReleasesLease", "Action": "pass"},
         ]), 0)
 
@@ -30,6 +31,7 @@ class VerifyEvidenceTests(unittest.TestCase):
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
             {"Test": "TestPostgresCertificateRevocationEnforced", "Action": "pass"},
+            {"Test": "TestPostgresCertificateScopeAndSuspension", "Action": "pass"},
             {"Test": "TestPostgresSigningFailureReleasesLease", "Action": "pass"},
         ]), 1)
 
@@ -45,6 +47,7 @@ class VerifyEvidenceTests(unittest.TestCase):
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
             {"Test": "TestPostgresCertificateRevocationEnforced", "Action": "pass"},
+            {"Test": "TestPostgresCertificateScopeAndSuspension", "Action": "pass"},
             {"Test": "TestPostgresSigningFailureReleasesLease", "Action": "pass"},
         ]), 1)
 
