@@ -62,8 +62,13 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
       - name: Run SQL transaction invariants
         run: bash tests/integration/enrollment_postgres.sh
-      - name: Run Go PostgreSQL enrollment integration
-        run: go test -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestPostgres' -v
+      - name: Verify test-evidence checker behavior
+        run: python3 -m unittest discover -s tools -p 'test_verify_test_results.py' -v
+      - name: Run Go PostgreSQL enrollment integration (evidence required)
+        run: |
+          set -o pipefail
+          go test -json -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestPostgres' | tee /tmp/go-integration.json
+          python3 tools/verify_test_results.py /tmp/go-integration.json
   console:
     name: Console / typecheck and build
     runs-on: ubuntu-latest
@@ -82,6 +87,16 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Typecheck and build
         run: npm run build
+  immutable-checkout:
+    name: CI / checkout must remain unchanged
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prevent untracked or modified sources after verification
+        run: |
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
   security:
     name: Supply chain / secret scan
     runs-on: ubuntu-latest
