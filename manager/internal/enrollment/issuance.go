@@ -26,6 +26,28 @@ type IssuanceResult struct {
 
 const issuanceLease = 45 * time.Second
 
+// IssueClaim proves possession of the same one-time token that reserved the
+// claim. A claim ID and public CSR are not sufficient enrollment authority.
+// This is still an internal Manager primitive, not an authenticated HTTP API.
+func (s SQLStore) IssueClaim(ctx context.Context, claimID, projectID, certID, issuerKeyID, rawToken string, csrDER []byte, issuer identity.Issuer) (IssuanceResult, error) {
+	var empty IssuanceResult
+	if s.DB == nil {
+		return empty, errors.New("nil database")
+	}
+	if claimID == "" || projectID == "" || rawToken == "" || len(rawToken) > 256 {
+		return empty, ErrInvalid
+	}
+	digest := sha256.Sum256([]byte(rawToken))
+	var stored []byte
+	err := s.DB.QueryRowContext(ctx, `SELECT t.token_digest
+ FROM enrollment_claims ec JOIN enrollment_tokens t ON t.id=ec.token_id
+ WHERE ec.id=$1 AND ec.project_id=$2 AND t.project_id=$2 AND t.consumed_at IS NOT NULL`, claimID, projectID).Scan(&stored)
+	if err != nil || len(stored) != len(digest) || subtle.ConstantTimeCompare(stored, digest[:]) != 1 {
+		return empty, ErrInvalid
+	}
+	return s.issueClaim(ctx, claimID, projectID, certID, issuerKeyID, csrDER, issuer)
+}
+
 func newLeaseID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -41,7 +63,7 @@ func newLeaseID() (string, error) {
 // 1. atomic DB lease reservation; 2. CA signing OUTSIDE any DB transaction;
 // 3. short DB transaction that validates the fencing lease and persists result.
 // This is not a public API: caller authorization and identity proof are required.
-func (s SQLStore) IssueClaim(ctx context.Context, claimID, projectID, certID, issuerKeyID string, csrDER []byte, issuer identity.Issuer) (IssuanceResult, error) {
+func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, issuerKeyID string, csrDER []byte, issuer identity.Issuer) (IssuanceResult, error) {
 	var empty IssuanceResult
 	if s.DB == nil {
 		return empty, errors.New("nil database")
