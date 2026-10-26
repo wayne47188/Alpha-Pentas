@@ -1,23 +1,22 @@
-# Existing Code Quality Audit (pending execution)
+# Existing Code Quality Audit
 
-Do not continue adding functional scope until this audit is completed with concrete evidence.
+Audit existing implementation before expanding the feature surface.
 
-## Audit inventory
-- Go manager / agent / CLI: formatting, error semantics, HTTP server shutdown and exposure.
-- Enrollment in-memory / SQL stores, claim, CSR validation and issuer.
-- PostgreSQL migrations 0001–0003: constraints, transactions, replay, uniqueness and certificate overlap.
-- Protocol protobuf compatibility and generated code requirements.
-- React build/toolchain lockfiles and quality checks.
-- GitHub Actions behavior, dependencies/permissions and integration tests.
+## Inventory
+- Manager, Agent and CLI: formatting, cancellation, timeout and error handling.
+- In-memory and PostgreSQL enrollment stores, claim and certificate issuance.
+- Migration 0001–0003: constraints, concurrency, rollback and replay.
+- Protobuf contract and compatibility handling.
+- React dependencies and reproducible build.
+- GitHub Actions integrity, workflow permissions and real integration coverage.
 
-## Initial findings to verify
-- **High:** issuance of a certificate while holding DB transaction/row lock; potential contention and signer latency.
-- **High:** some enrollment paths are not integrated with an authenticated, authorized API. They MUST NOT be exposed.
-- **High:** a claim ID must never grant authority to retrieve certificate bytes.
-- **Medium:** loss-of-response idempotency and token claim replay recovery are incomplete.
-- **Medium:** committed Go formatting is not consistently normalized; current CI may mask violations.
-- **Medium:** frontend lockfile and reproducible build missing.
-- **Medium:** integration shell script verifies simplified SQL, not complete Go service methods.
-- **Medium:** certificates and revocation have no live transport enforcement yet.
+## Items requiring verification
+- Signing operations performed while holding a database row lock.
+- Absence of authenticated authorization on enrollment exposure paths.
+- Claim IDs must not be treated as bearer authorization for public certificates.
+- Incomplete retry / recovery behavior after connection loss.
+- Inconsistent Go formatting and missing frontend lockfile.
+- Shell SQL test does not directly exercise Go service methods.
+- Certificate revocation has not been integrated into live transport.
 
-For each finding record source file/line, impact, reproduction, proposed fix, regression test, severity and owner. No claim of verified findings until evidence is collected.
+For each confirmed finding, record affected path and line, severity, impact, test reproduction, proposed remediation and owner. Do not label suspected findings as verified without evidence.
