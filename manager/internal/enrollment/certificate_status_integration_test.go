@@ -4,14 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
+	"database/sql"
 	"errors"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
 	_ "github.com/lib/pq"
-	"database/sql"
+	"github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
 )
 
 func TestPostgresCertificateRevocationEnforced(t *testing.T) {
