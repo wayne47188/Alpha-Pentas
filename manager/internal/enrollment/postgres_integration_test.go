@@ -116,6 +116,9 @@ func TestPostgresEnrollmentLifecycle(t *testing.T) {
 	if won.Load() != 1 {
 		t.Fatalf("claims succeeded: %d, want 1", won.Load())
 	}
+	if _, err := store.IssueClaim(ctx, claimedID, project, randomUUID(t), "test-CA", "wrong-token", csr, issuer); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("invalid enrollment proof accepted: %v", err)
+	}
 	issued, err := store.IssueClaim(ctx, claimedID, project, randomUUID(t), "test-CA", token, csr, issuer)
 	if err != nil {
 		t.Fatal(err)
