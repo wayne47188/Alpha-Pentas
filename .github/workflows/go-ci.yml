@@ -10,9 +10,40 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Format for baseline validation
-        run: gofmt -w manager/cmd/manager/main.go manager/cmd/manager/main_test.go agent/cmd/agent/main.go cli/cmd/alpha/main.go
-      - name: Test
-        run: go test ./...
+      - name: Unit tests (race detector)
+        run: go test -race ./...
       - name: Vet
         run: go vet ./...
+      - name: Formatting
+        run: |
+          files=$(gofmt -l manager agent cli)
+          if [ -n "$files" ]; then
+            echo "Go files need gofmt:"
+            echo "$files"
+            exit 1
+          fi
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: alpha
+          POSTGRES_PASSWORD: alpha
+          POSTGRES_DB: alpha_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alpha -d alpha_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://alpha:alpha@127.0.0.1:5432/alpha_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Enrollment transaction integration checks
+        run: bash tests/integration/enrollment_postgres.sh
