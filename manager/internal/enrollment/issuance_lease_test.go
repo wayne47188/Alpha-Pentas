@@ -54,20 +54,21 @@ func TestPostgresSigningDoesNotHoldRowLock(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	store := testSQLStore(t, db)
 	issuer, csr := testIssuer(t)
-	token, err := (SQLStore{DB: db}).IssueToken(ctx, randomUUID(t), project, "test", time.Minute)
+	token, err := (testSQLStore(t, db)).IssueToken(ctx, randomUUID(t), project, "test", time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
 	claimant := randomUUID(t)
-	if err = (SQLStore{DB: db}).Claim(ctx, token, project, claimant, claim, csr); err != nil {
+	if err = (testSQLStore(t, db)).Claim(ctx, token, project, claimant, claim, csr); err != nil {
 		t.Fatal(err)
 	}
 	key := &blockingSigner{Signer: issuer.Signer, entered: make(chan struct{}), release: make(chan struct{})}
 	issuer.Signer = key
 	result := make(chan error, 1)
 	go func() {
-		_, e := (SQLStore{DB: db}).IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
+		_, e := (testSQLStore(t, db)).IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
 		result <- e
 	}()
 	select {
@@ -78,7 +79,7 @@ func TestPostgresSigningDoesNotHoldRowLock(t *testing.T) {
 	start := time.Now()
 	fastCtx, stop := context.WithTimeout(ctx, 2*time.Second)
 	defer stop()
-	_, busy := (SQLStore{DB: db}).IssueClaim(fastCtx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
+	_, busy := (testSQLStore(t, db)).IssueClaim(fastCtx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
 	if !errors.Is(busy, ErrClaimBusy) {
 		t.Errorf("concurrent claim = %v, want ErrClaimBusy", busy)
 	}
@@ -94,7 +95,7 @@ func TestPostgresSigningDoesNotHoldRowLock(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("signer completion hung")
 	}
-	other, err := (SQLStore{DB: db}).IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
+	other, err := (testSQLStore(t, db)).IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
 	if err != nil {
 		t.Fatal(err)
 	}
