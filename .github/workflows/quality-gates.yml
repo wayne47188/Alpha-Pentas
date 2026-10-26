@@ -2,7 +2,7 @@ name: Quality Gates
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, chore/github-quality-gates]
   push:
     branches: [main]
   workflow_dispatch:
