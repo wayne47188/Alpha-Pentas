@@ -88,3 +88,49 @@ func TestPostgresExpiredLeaseFencesStaleSigner(t *testing.T) {
 		t.Fatalf("durable certificates = %d, want exactly one", count)
 	}
 }
+
+func TestPostgresSigningFailureReleasesLease(t *testing.T) {
+	dsn := os.Getenv("ALPHA_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("requires disposable PostgreSQL")
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tenant, project, agent, claim := randomUUID(t), randomUUID(t), randomUUID(t), randomUUID(t)
+	if _, err = db.ExecContext(ctx, "INSERT INTO tenants(id,name) VALUES($1,'failure-test')", tenant); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, "INSERT INTO projects(id,tenant_id,name) VALUES($1,$2,'failure-test')", project, tenant); err != nil {
+		t.Fatal(err)
+	}
+	issuer, csr := testIssuer(t)
+	store := SQLStore{DB: db}
+	token, err := store.IssueToken(ctx, randomUUID(t), project, "test", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.Claim(ctx, token, project, agent, claim, csr); err != nil {
+		t.Fatal(err)
+	}
+	invalidIssuer := issuer
+	invalidIssuer.Signer = nil
+	if _, err = store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", csr, invalidIssuer); err == nil {
+		t.Fatal("signing failure unexpectedly succeeded")
+	}
+	var state string
+	var owner sql.NullString
+	if err = db.QueryRowContext(ctx, "SELECT state,lease_owner FROM enrollment_claims WHERE id=$1", claim).Scan(&state, &owner); err != nil {
+		t.Fatal(err)
+	}
+	if state != "pending" || owner.Valid {
+		t.Fatalf("lease not released on signing failure: state=%s owner=%v", state, owner)
+	}
+	if _, err = store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", csr, issuer); err != nil {
+		t.Fatalf("retry after signer recovery failed: %v", err)
+	}
+}
