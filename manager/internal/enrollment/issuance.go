@@ -65,7 +65,9 @@ func (s SQLStore) IssueClaim(ctx context.Context, claimID, projectID, certID, is
  // the pool through lock wait chains. The lease fences late results.
  issued,err:=issuer.Issue(csrDER,projectID,agentID,7*24*time.Hour)
  if err!=nil {
-  _,_ = s.DB.ExecContext(context.WithoutCancel(ctx),`UPDATE enrollment_claims
+  cleanupCtx,cancel:=context.WithTimeout(context.WithoutCancel(ctx),5*time.Second)
+  defer cancel()
+  _,_ = s.DB.ExecContext(cleanupCtx,`UPDATE enrollment_claims
  SET state='pending',lease_owner=NULL,lease_expires_at=NULL
  WHERE id=$1 AND project_id=$2 AND state='issuing' AND lease_owner=$3`,claimID,projectID,leaseID)
   return empty,fmt.Errorf("sign certificate: %w",err)
