@@ -13,7 +13,7 @@ import (
 // SQLStore stores token metadata centrally; the caller supplies an opened
 // PostgreSQL database/sql connection. No DB runs inside the endpoint Agent.
 type SQLStore struct {
-	DB *sql.DB
+	DB          *sql.DB
 	SigningPool *SigningPool
 }
 
