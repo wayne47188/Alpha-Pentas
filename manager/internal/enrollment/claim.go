@@ -6,6 +6,8 @@ import (
  "database/sql"
  "errors"
  "fmt"
+
+ "github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
 )
 
 var ErrClaimConflict = errors.New("enrollment claim conflicts with existing identity")
@@ -18,6 +20,7 @@ func (s SQLStore) Claim(ctx context.Context, token, projectID, agentID, claimID 
  if token == "" || projectID == "" || agentID == "" || claimID == "" || len(csrDER)==0 {
   return ErrInvalid
  }
+ if _,err:=identity.ValidateCSR(csrDER);err!=nil{return err}
  digest:=sha256.Sum256([]byte(token))
  csrHash:=sha256.Sum256(csrDER)
  tx,err:=s.DB.BeginTx(ctx,&sql.TxOptions{Isolation:sql.LevelReadCommitted})
