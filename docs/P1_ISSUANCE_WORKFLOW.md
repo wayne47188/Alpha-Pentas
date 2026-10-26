@@ -10,10 +10,14 @@ The issuance flow is now a short-transaction lease reservation followed by signi
 - `issued`: a request with the same CSR can retrieve the saved public certificate if it remains valid and not revoked, subject to caller authorization at application/API layers.
 
 ## Limitations and required tests
-1. The current lease is fixed at 45 seconds with no renewal. Slow signing can waste work and cause retries; bounded signing time and lease renewal need explicit design.
+1. The lease is fixed at 45 seconds with no renewal. The injected SigningPool now enforces a maximum concurrent signer count and an operation deadline shorter than the lease. A non-cooperative hardware signer cannot be forcibly stopped; its slot stays occupied until completion, so throughput may degrade safely rather than grow unbounded. Lease renewal and a context-aware remote CA adapter remain to be implemented.
 2. Out-of-band CA signer cannot be rolled back: a signed-but-uncommitted certificate may exist. Only database-committed certificates must be accepted by transport identity policy; CA serial/fingerprint revocation handling remains required.
 3. Public receipt retrieval is **not** an authorization mechanism. The call site must verify operator/project/Agent binding; this method must not become a directly exposed endpoint.
 4. PostgreSQL contention, worker termination, signer failure, takeover and clock/lease expiry races require end-to-end integration tests.
 5. CA rotation, revocation and trusted transport enforcement remain unfinished.
 
 Migrations 0001–0004 are required. No production-readiness claim until the above tests pass.
+
+## Signing worker construction
+
+A Manager must explicitly inject a bounded `SigningPool` into `SQLStore` before invoking `IssueClaim`. Absence of this pool fails closed with `ErrSigningPool`; callers must not bypass the private `issueClaim` method. The constructor rejects zero capacity and a timeout greater than or equal to the DB lease. Production should configure a shared pool per Manager instance rather than per request, and use request deadlines plus per-operator rate limits at the API boundary.
