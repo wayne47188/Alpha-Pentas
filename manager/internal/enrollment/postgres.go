@@ -12,7 +12,10 @@ import (
 
 // SQLStore stores token metadata centrally; the caller supplies an opened
 // PostgreSQL database/sql connection. No DB runs inside the endpoint Agent.
-type SQLStore struct{ DB *sql.DB }
+type SQLStore struct {
+	DB *sql.DB
+	SigningPool *SigningPool
+}
 
 // IssueToken persists a single-use token digest. Never log or persist raw.
 func (s SQLStore) IssueToken(ctx context.Context, tokenID, projectID, issuer string, ttl time.Duration) (string, error) {
