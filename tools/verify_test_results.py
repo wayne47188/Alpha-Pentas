@@ -11,6 +11,7 @@ from pathlib import Path
 REQUIRED = {
     "TestPostgresEnrollmentLifecycle",
     "TestPostgresSigningDoesNotHoldRowLock",
+    "TestPostgresExpiredLeaseFencesStaleSigner",
 }
 
 def main() -> int:
