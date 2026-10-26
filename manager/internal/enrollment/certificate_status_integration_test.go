@@ -42,7 +42,7 @@ func TestPostgresCertificateRevocationEnforced(t *testing.T) {
 	if err = store.Claim(ctx, token, project, agent, claim, csr); err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", csr, issuer)
+	result, err := store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
 	if err != nil {
 		t.Fatal(err)
 	}
