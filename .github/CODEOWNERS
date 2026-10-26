@@ -1,0 +1,9 @@
+# Default owner responsible for triage (not automatic approval enforcement)
+* @wayne47188
+
+# Security-sensitive changes
+/manager/internal/identity/ @wayne47188
+/manager/internal/enrollment/ @wayne47188
+/manager/migrations/ @wayne47188
+/.github/workflows/ @wayne47188
+/protocol/ @wayne47188
