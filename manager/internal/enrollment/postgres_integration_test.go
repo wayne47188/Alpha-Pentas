@@ -20,6 +20,15 @@ import (
 	"github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
 )
 
+func testSQLStore(t *testing.T, db *sql.DB) SQLStore {
+	t.Helper()
+	pool, err := NewSigningPool(4, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return SQLStore{DB: db, SigningPool: pool}
+}
+
 func randomUUID(t *testing.T) string {
 	t.Helper()
 	b := make([]byte, 16)
@@ -86,7 +95,7 @@ func TestPostgresEnrollmentLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	store := SQLStore{DB: db}
+	store := testSQLStore(t, db)
 	token, err := store.IssueToken(ctx, randomUUID(t), project, "integration", time.Minute)
 	if err != nil {
 		t.Fatal(err)
