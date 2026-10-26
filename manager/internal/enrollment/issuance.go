@@ -59,7 +59,7 @@ func newLeaseID() (string, error) {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[:8], h[8:12], h[12:16], h[16:20], h[20:]), nil
 }
 
-// IssueClaim follows a three-phase state machine:
+// issueClaim follows a three-phase state machine:
 // 1. atomic DB lease reservation; 2. CA signing OUTSIDE any DB transaction;
 // 3. short DB transaction that validates the fencing lease and persists result.
 // This is not a public API: caller authorization and identity proof are required.
@@ -84,11 +84,11 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 	// reclaimed, but a stale signer is fenced at finalization.
 	var agentID string
 	err = s.DB.QueryRowContext(ctx, `UPDATE enrollment_claims
- SET state='issuing',lease_owner=$4,lease_expires_at=now()+interval '45 seconds',
+ SET state='issuing',lease_owner=$4,lease_expires_at=now()+($5 * interval '1 second'),
  issuance_attempts=issuance_attempts+1
  WHERE id=$1 AND project_id=$2 AND csr_sha256=$3
  AND (state='pending' OR (state='issuing' AND lease_expires_at<now()))
- RETURNING agent_id`, claimID, projectID, digest[:], leaseID).Scan(&agentID)
+ RETURNING agent_id`, claimID, projectID, digest[:], leaseID, int64(issuanceLease/time.Second)).Scan(&agentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return s.existingIssuance(ctx, claimID, projectID, digest)
 	}
