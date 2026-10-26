@@ -13,6 +13,7 @@ REQUIRED = {
     "TestPostgresSigningDoesNotHoldRowLock",
     "TestPostgresExpiredLeaseFencesStaleSigner",
     "TestPostgresCertificateRevocationEnforced",
+    "TestPostgresSigningFailureReleasesLease",
 }
 
 def main() -> int:
