@@ -2,7 +2,6 @@ package enrollment
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 )
 
@@ -13,7 +12,7 @@ func (s SQLStore) CertificateStatus(ctx context.Context, projectID, agentID stri
 	if s.DB == nil {
 		return errors.New("nil database")
 	}
-	if projectID == "" || agentID == "" || fingerprint == (sha256.Sum256(nil)) {
+	if projectID == "" || agentID == "" || fingerprint == ([32]byte{}) {
 		return ErrInvalid
 	}
 	var active bool
