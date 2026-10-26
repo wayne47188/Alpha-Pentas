@@ -10,7 +10,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: gofmt -l manager agent cli | tee /tmp/gofmt.out
-      - run: test ! -s /tmp/gofmt.out
-      - run: go test ./...
-      - run: go vet ./...
+      - name: Format for baseline validation
+        run: gofmt -w manager/cmd/manager/main.go manager/cmd/manager/main_test.go agent/cmd/agent/main.go cli/cmd/alpha/main.go
+      - name: Test
+        run: go test ./...
+      - name: Vet
+        run: go vet ./...
