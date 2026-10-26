@@ -1,0 +1,31 @@
+name: PKI formatting bootstrap (temporary)
+on:
+  push:
+    branches: [fix/audit-remediation-001]
+    paths: ['.github/workflows/pki-format-bootstrap.yml']
+permissions:
+  contents: write
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/audit-remediation-001
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format and verify Go source
+        run: |
+          gofmt -w manager/internal/enrollment/issuance.go
+          go test ./...
+          go vet ./...
+      - name: Commit formatting
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manager/internal/enrollment/issuance.go
+          if ! git diff --cached --quiet; then
+            git commit -m "style(pki): format leased issuance implementation"
+            git push origin HEAD:fix/audit-remediation-001
+          fi
