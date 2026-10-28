@@ -34,7 +34,7 @@ jobs:
 
       - name: Verify dependencies before release
         run: |
-          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+          go run golang.org/x/vuln/cmd/govulncheck@e672cbe8fbc8c76e28fcb6db0efd9ce354e0dac5 ./...
           cd console
           npm ci --ignore-scripts --no-audit --no-fund
           npm audit --omit=dev --audit-level=high
