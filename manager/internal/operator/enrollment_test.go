@@ -13,7 +13,7 @@ type grants struct {
 	allowed bool
 }
 
-func (g grants) HasGrant(context.Context, string, string, string, authz.Action) (bool, error) {
+func (g grants) CheckGrant(context.Context, string, string, string, authz.Action) (bool, error) {
 	return g.allowed, nil
 }
 
