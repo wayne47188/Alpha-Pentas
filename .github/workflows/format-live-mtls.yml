@@ -1,0 +1,28 @@
+name: Format live mTLS test (temporary)
+on:
+  push:
+    branches: [fix/audit-remediation-001]
+    paths: ['.github/workflows/format-live-mtls.yml']
+permissions:
+  contents: write
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/audit-remediation-001
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+      - name: Format target
+        run: gofmt -w manager/cmd/manager/operator_server_integration_test.go
+      - name: Commit if changed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manager/cmd/manager/operator_server_integration_test.go
+          if ! git diff --cached --quiet; then
+            git commit -m "style(manager): gofmt live mTLS integration test"
+            git push origin HEAD:fix/audit-remediation-001
+          fi
