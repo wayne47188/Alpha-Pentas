@@ -101,3 +101,37 @@ func TestAuthorizeProjectRejectsCrossProject(t *testing.T) {
 		t.Fatalf("cross-project Agent allowed: %v", err)
 	}
 }
+
+
+func TestWatchSessionCancelsAfterRevocation(t *testing.T) {
+	roots, cert := agentTLSFixture(t)
+	var revoked atomic.Bool
+	status := func(context.Context, string, string, [32]byte) error {
+		if revoked.Load() {
+			return errors.New("revoked")
+		}
+		return nil
+	}
+	auth, err := NewAgentTLSAuthenticator(roots, status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth.SessionRecheckInterval = 100 * time.Millisecond
+	state := tls.ConnectionState{PeerCertificates: []*x509.Certificate{cert}}
+	peer, err := auth.authenticate(context.Background(), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sessionCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err = auth.WatchSession(sessionCtx, peer, cancel); err != nil {
+		t.Fatal(err)
+	}
+	revoked.Store(true)
+	select {
+	case <-sessionCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("revoked session was not cancelled")
+	}
+}
