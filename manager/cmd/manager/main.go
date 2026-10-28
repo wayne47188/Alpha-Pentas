@@ -44,16 +44,13 @@ func run(ctx context.Context) error {
 		return err
 	}
 	var operatorServer *http.Server
-	var closeOperatorDB func() error
 	if operatorEnabled {
-		var dbCloseTarget interface{ Close() error }
-		operatorServer, db, buildErr := newOperatorServer(ctx, operatorCfg)
+		builtServer, db, buildErr := newOperatorServer(ctx, operatorCfg)
 		if buildErr != nil {
 			return buildErr
 		}
-		dbCloseTarget = db
-		closeOperatorDB = dbCloseTarget.Close
-		defer closeOperatorDB()
+		operatorServer = builtServer
+		defer db.Close()
 	}
 
 	errCh := make(chan error, 2)
