@@ -50,7 +50,7 @@ func TestPostgresExpiredLeaseFencesStaleSigner(t *testing.T) {
 	stalledIssuer.Signer = blocker
 	stale := make(chan error, 1)
 	go func() {
-		_, issueErr := store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, stalledIssuer)
+		_, issueErr := store.IssueClaim(ctx, IssueRequest{ClaimID: claim, ProjectID: project, CertificateID: randomUUID(t), IssuerKeyID: "CA-test", EnrollmentToken: token, CSRDER: csr}, stalledIssuer)
 		stale <- issueErr
 	}()
 	select {
@@ -65,7 +65,7 @@ func TestPostgresExpiredLeaseFencesStaleSigner(t *testing.T) {
 		close(blocker.release)
 		t.Fatal(err)
 	}
-	replacement, err := store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
+	replacement, err := store.IssueClaim(ctx, IssueRequest{ClaimID: claim, ProjectID: project, CertificateID: randomUUID(t), IssuerKeyID: "CA-test", EnrollmentToken: token, CSRDER: csr}, issuer)
 	close(blocker.release)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ func TestPostgresSigningFailureReleasesLease(t *testing.T) {
 	}
 	invalidIssuer := issuer
 	invalidIssuer.Signer = nil
-	if _, err = store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, invalidIssuer); err == nil {
+	if _, err = store.IssueClaim(ctx, IssueRequest{ClaimID: claim, ProjectID: project, CertificateID: randomUUID(t), IssuerKeyID: "CA-test", EnrollmentToken: token, CSRDER: csr}, invalidIssuer); err == nil {
 		t.Fatal("signing failure unexpectedly succeeded")
 	}
 	var state string
@@ -131,7 +131,7 @@ func TestPostgresSigningFailureReleasesLease(t *testing.T) {
 	if state != "pending" || owner.Valid {
 		t.Fatalf("lease not released on signing failure: state=%s owner=%v", state, owner)
 	}
-	if _, err = store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer); err != nil {
+	if _, err = store.IssueClaim(ctx, IssueRequest{ClaimID: claim, ProjectID: project, CertificateID: randomUUID(t), IssuerKeyID: "CA-test", EnrollmentToken: token, CSRDER: csr}, issuer); err != nil {
 		t.Fatalf("retry after signer recovery failed: %v", err)
 	}
 }
