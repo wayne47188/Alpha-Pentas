@@ -106,8 +106,8 @@ func (s SQLStore) issueClaim(ctx context.Context, req IssueRequest, issuer ident
 		return empty, fmt.Errorf("acquire issuance lease: %w", err)
 	}
 
-	issued, err := s.SigningPool.Sign(ctx, func() (identity.Result, error) {
-		return issuer.Issue(req.CSRDER, req.ProjectID, agentID, 7*24*time.Hour)
+	issued, err := s.SigningPool.SignContext(ctx, func(signCtx context.Context) (identity.Result, error) {
+		return issuer.IssueContext(signCtx, req.CSRDER, req.ProjectID, agentID, 7*24*time.Hour)
 	})
 	if err != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
