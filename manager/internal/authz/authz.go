@@ -59,7 +59,6 @@ func (a Authorizer) Check(ctx context.Context, principal Principal, scope Scope)
 	return nil
 }
 
-
 func grantCheckerAvailable(checker GrantChecker) bool {
 	if checker == nil {
 		return false
