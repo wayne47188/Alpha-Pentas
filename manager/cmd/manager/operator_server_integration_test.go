@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
