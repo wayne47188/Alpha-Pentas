@@ -24,28 +24,37 @@ type IssuanceResult struct {
 	Serial         string
 }
 
+type IssueRequest struct {
+	ClaimID         string
+	ProjectID       string
+	CertificateID   string
+	IssuerKeyID     string
+	EnrollmentToken string
+	CSRDER          []byte
+}
+
 const issuanceLease = 45 * time.Second
 
 // IssueClaim proves possession of the same one-time token that reserved the
 // claim. A claim ID and public CSR are not sufficient enrollment authority.
 // This is still an internal Manager primitive, not an authenticated HTTP API.
-func (s SQLStore) IssueClaim(ctx context.Context, claimID, projectID, certID, issuerKeyID, rawToken string, csrDER []byte, issuer identity.Issuer) (IssuanceResult, error) {
+func (s SQLStore) IssueClaim(ctx context.Context, req IssueRequest, issuer identity.Issuer) (IssuanceResult, error) {
 	var empty IssuanceResult
 	if s.DB == nil {
 		return empty, errors.New("nil database")
 	}
-	if claimID == "" || projectID == "" || rawToken == "" || len(rawToken) > 256 {
+	if req.ClaimID == "" || req.ProjectID == "" || req.EnrollmentToken == "" || len(req.EnrollmentToken) > 256 {
 		return empty, ErrInvalid
 	}
-	digest := sha256.Sum256([]byte(rawToken))
+	tokenDigest := sha256.Sum256([]byte(req.EnrollmentToken))
 	var stored []byte
 	err := s.DB.QueryRowContext(ctx, `SELECT t.token_digest
  FROM enrollment_claims ec JOIN enrollment_tokens t ON t.id=ec.token_id
- WHERE ec.id=$1 AND ec.project_id=$2 AND t.project_id=$2 AND t.consumed_at IS NOT NULL`, claimID, projectID).Scan(&stored)
-	if err != nil || len(stored) != len(digest) || subtle.ConstantTimeCompare(stored, digest[:]) != 1 {
+ WHERE ec.id=$1 AND ec.project_id=$2 AND t.project_id=$2 AND t.consumed_at IS NOT NULL`, req.ClaimID, req.ProjectID).Scan(&stored)
+	if err != nil || len(stored) != len(tokenDigest) || subtle.ConstantTimeCompare(stored, tokenDigest[:]) != 1 {
 		return empty, ErrInvalid
 	}
-	return s.issueClaim(ctx, claimID, projectID, certID, issuerKeyID, csrDER, issuer)
+	return s.issueClaim(ctx, req, issuer)
 }
 
 func newLeaseID() (string, error) {
@@ -63,7 +72,7 @@ func newLeaseID() (string, error) {
 // 1. atomic DB lease reservation; 2. CA signing OUTSIDE any DB transaction;
 // 3. short DB transaction that validates the fencing lease and persists result.
 // This is not a public API: caller authorization and identity proof are required.
-func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, issuerKeyID string, csrDER []byte, issuer identity.Issuer) (IssuanceResult, error) {
+func (s SQLStore) issueClaim(ctx context.Context, req IssueRequest, issuer identity.Issuer) (IssuanceResult, error) {
 	var empty IssuanceResult
 	if s.DB == nil {
 		return empty, errors.New("nil database")
@@ -71,45 +80,41 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 	if s.SigningPool == nil {
 		return empty, ErrSigningPool
 	}
-	if claimID == "" || projectID == "" || certID == "" || issuerKeyID == "" || len(csrDER) == 0 {
+	if req.ClaimID == "" || req.ProjectID == "" || req.CertificateID == "" || req.IssuerKeyID == "" || len(req.CSRDER) == 0 {
 		return empty, ErrInvalid
 	}
-	if _, err := identity.ValidateCSR(csrDER); err != nil {
+	if _, err := identity.ValidateCSR(req.CSRDER); err != nil {
 		return empty, err
 	}
-	digest := sha256.Sum256(csrDER)
+	csrDigest := sha256.Sum256(req.CSRDER)
 	leaseID, err := newLeaseID()
 	if err != nil {
 		return empty, err
 	}
 
-	// UPDATE has a short-lived row lock only. Expired reservations can be
-	// reclaimed, but a stale signer is fenced at finalization.
 	var agentID string
 	err = s.DB.QueryRowContext(ctx, `UPDATE enrollment_claims
  SET state='issuing',lease_owner=$4,lease_expires_at=now()+($5 * interval '1 second'),
  issuance_attempts=issuance_attempts+1
  WHERE id=$1 AND project_id=$2 AND csr_sha256=$3
  AND (state='pending' OR (state='issuing' AND lease_expires_at<now()))
- RETURNING agent_id`, claimID, projectID, digest[:], leaseID, int64(issuanceLease/time.Second)).Scan(&agentID)
+ RETURNING agent_id`, req.ClaimID, req.ProjectID, csrDigest[:], leaseID, int64(issuanceLease/time.Second)).Scan(&agentID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return s.existingIssuance(ctx, claimID, projectID, digest)
+		return s.existingIssuance(ctx, req.ClaimID, req.ProjectID, csrDigest)
 	}
 	if err != nil {
 		return empty, fmt.Errorf("acquire issuance lease: %w", err)
 	}
 
-	// No DB lock is held during signing. A slow/failed signer cannot exhaust
-	// the pool through lock wait chains. The lease fences late results.
 	issued, err := s.SigningPool.Sign(ctx, func() (identity.Result, error) {
-		return issuer.Issue(csrDER, projectID, agentID, 7*24*time.Hour)
+		return issuer.Issue(req.CSRDER, req.ProjectID, agentID, 7*24*time.Hour)
 	})
 	if err != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_, _ = s.DB.ExecContext(cleanupCtx, `UPDATE enrollment_claims
  SET state='pending',lease_owner=NULL,lease_expires_at=NULL
- WHERE id=$1 AND project_id=$2 AND state='issuing' AND lease_owner=$3`, claimID, projectID, leaseID)
+ WHERE id=$1 AND project_id=$2 AND state='issuing' AND lease_owner=$3`, req.ClaimID, req.ProjectID, leaseID)
 		return empty, fmt.Errorf("sign certificate: %w", err)
 	}
 	cert, err := x509.ParseCertificate(issued.CertificateDER)
@@ -117,7 +122,6 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 		return empty, err
 	}
 
-	// Bounded short transaction. Lock validates the reservation before inserts.
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return empty, err
@@ -127,27 +131,27 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 	var storedDigest []byte
 	err = tx.QueryRowContext(ctx, `SELECT agent_id,csr_sha256 FROM enrollment_claims
  WHERE id=$1 AND project_id=$2 AND state='issuing'
- AND lease_owner=$3 AND lease_expires_at>now() FOR UPDATE`, claimID, projectID, leaseID).Scan(&currentAgent, &storedDigest)
+ AND lease_owner=$3 AND lease_expires_at>now() FOR UPDATE`, req.ClaimID, req.ProjectID, leaseID).Scan(&currentAgent, &storedDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return empty, ErrLeaseLost
 	}
 	if err != nil {
 		return empty, err
 	}
-	if currentAgent != agentID || len(storedDigest) != len(digest) || subtle.ConstantTimeCompare(storedDigest, digest[:]) != 1 {
+	if currentAgent != agentID || len(storedDigest) != len(csrDigest) || subtle.ConstantTimeCompare(storedDigest, csrDigest[:]) != 1 {
 		return empty, ErrInvalid
 	}
 
 	_, err = tx.ExecContext(ctx, `INSERT INTO agent_certificates
  (id,agent_id,issuer_key_id,serial_number,sha256_fingerprint,not_before,not_after,certificate_der)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		certID, agentID, issuerKeyID, issued.Serial, issued.Fingerprint[:], cert.NotBefore, cert.NotAfter, issued.CertificateDER)
+		req.CertificateID, agentID, req.IssuerKeyID, issued.Serial, issued.Fingerprint[:], cert.NotBefore, cert.NotAfter, issued.CertificateDER)
 	if err != nil {
 		return empty, err
 	}
 	claimUpdate, err := tx.ExecContext(ctx, `UPDATE enrollment_claims
  SET state='issued',issued_at=now(),certificate_id=$2,lease_owner=NULL,lease_expires_at=NULL
- WHERE id=$1 AND state='issuing' AND lease_owner=$3`, claimID, certID, leaseID)
+ WHERE id=$1 AND state='issuing' AND lease_owner=$3`, req.ClaimID, req.CertificateID, leaseID)
 	if err != nil {
 		return empty, err
 	}
@@ -159,7 +163,7 @@ func (s SQLStore) issueClaim(ctx context.Context, claimID, projectID, certID, is
 		return empty, ErrLeaseLost
 	}
 	agentUpdate, err := tx.ExecContext(ctx, `UPDATE agents SET state='active',enrolled_at=now()
- WHERE id=$1 AND project_id=$2 AND state='pending'`, agentID, projectID)
+ WHERE id=$1 AND project_id=$2 AND state='pending'`, agentID, req.ProjectID)
 	if err != nil {
 		return empty, err
 	}
