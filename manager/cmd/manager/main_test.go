@@ -19,7 +19,6 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-
 func TestOperatorConfigFailsClosedWhenPartiallyConfigured(t *testing.T) {
 	t.Setenv("ALPHA_OPERATOR_LISTEN", "127.0.0.1:8443")
 	t.Setenv("ALPHA_OPERATOR_TLS_CERT", "")
