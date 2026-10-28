@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -24,22 +25,81 @@ func newHandler() http.Handler {
 	return mux
 }
 
-func main() {
+func run(ctx context.Context) error {
 	addr := os.Getenv("ALPHA_MANAGER_LISTEN")
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
-	server := &http.Server{Addr: addr, Handler: newHandler(), ReadHeaderTimeout: 5 * time.Second}
+	healthServer := &http.Server{
+		Addr:              addr,
+		Handler:           newHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	operatorCfg, operatorEnabled, err := operatorConfigFromEnv()
+	if err != nil {
+		return err
+	}
+	var operatorServer *http.Server
+	var closeOperatorDB func() error
+	if operatorEnabled {
+		var dbCloseTarget interface{ Close() error }
+		operatorServer, db, buildErr := newOperatorServer(ctx, operatorCfg)
+		if buildErr != nil {
+			return buildErr
+		}
+		dbCloseTarget = db
+		closeOperatorDB = dbCloseTarget.Close
+		defer closeOperatorDB()
+	}
+
+	errCh := make(chan error, 2)
+	go func() {
+		log.Printf("Alpha Pentas Manager health listener on %s", addr)
+		err := healthServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	if operatorEnabled {
+		go func() {
+			log.Printf("Alpha Pentas Manager operator mTLS listener on %s", operatorCfg.Addr)
+			err := operatorServer.ListenAndServeTLS("", "")
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- err
+			}
+		}()
+	}
+
+	select {
+	case <-ctx.Done():
+	case err = <-errCh:
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	healthErr := healthServer.Shutdown(shutdownCtx)
+	var operatorErr error
+	if operatorServer != nil {
+		operatorErr = operatorServer.Shutdown(shutdownCtx)
+	}
+	if err != nil {
+		return err
+	}
+	if healthErr != nil {
+		return healthErr
+	}
+	return operatorErr
+}
+
+func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdown)
-	}()
-	log.Printf("Alpha Pentas Manager (P0 health-only) listening on %s", addr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := run(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
