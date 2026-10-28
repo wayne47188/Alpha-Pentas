@@ -136,7 +136,6 @@ func TestPostgresSigningFailureReleasesLease(t *testing.T) {
 	}
 }
 
-
 func TestPostgresConnectionLossDuringSigningRecoversAfterLease(t *testing.T) {
 	dsn := os.Getenv("ALPHA_TEST_DATABASE_URL")
 	if dsn == "" {
