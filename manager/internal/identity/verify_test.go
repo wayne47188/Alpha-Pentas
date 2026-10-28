@@ -59,7 +59,6 @@ func TestVerifyAgentPeerRejectsWrongScopeAndExpiry(t *testing.T) {
 	}
 }
 
-
 func TestVerifyAgentPeerCARotationOverlap(t *testing.T) {
 	oldIssuer, oldCSR := fixture(t)
 	newIssuer, newCSR := fixture(t)
