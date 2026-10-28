@@ -15,6 +15,7 @@ class VerifyEvidenceTests(unittest.TestCase):
 
     def test_complete(self):
         self.assertEqual(self.check([
+            {"Test": "TestDockerPostgresServerRestartDuringSigningRecovers", "Action": "pass"},
             {"Test": "TestPostgresConnectionLossDuringSigningRecoversAfterLease", "Action": "pass"},
             {"Test": "TestPostgresOperatorMTLSIntegration", "Action": "pass"},
             {"Test": "TestPostgresOperatorDenialAudit", "Action": "pass"},
