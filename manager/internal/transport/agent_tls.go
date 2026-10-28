@@ -86,7 +86,6 @@ func (a AgentTLSAuthenticator) AuthorizeProject(ctx context.Context, state tls.C
 	return peer.AgentID, nil
 }
 
-
 // WatchSession actively invalidates an established transport session after
 // certificate revocation, Agent suspension, project suspension or expiry.
 // A gRPC stream should pass its context cancel function here after handshake.
