@@ -11,9 +11,9 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
-	"sync/atomic"
 
 	"github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
 	"google.golang.org/grpc"
@@ -39,42 +39,56 @@ func grpcTLSFixture(t *testing.T) grpcFixture {
 	now := time.Now()
 	caTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(100),
-		Subject: pkix.Name{CommonName: "gRPC Test CA"},
-		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(2 * time.Hour),
+		Subject:      pkix.Name{CommonName: "gRPC Test CA"},
+		NotBefore:    now.Add(-time.Hour), NotAfter: now.Add(2 * time.Hour),
 		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
 	}
 	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, caKey.Public(), caKey)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ca, err := x509.ParseCertificate(caDER)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	makeCert := func(serial int64, commonName string, usages []x509.ExtKeyUsage, dns []string) tls.Certificate {
 		_, key, keyErr := ed25519.GenerateKey(rand.Reader)
-		if keyErr != nil { t.Fatal(keyErr) }
+		if keyErr != nil {
+			t.Fatal(keyErr)
+		}
 		template := &x509.Certificate{
 			SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: commonName},
 			NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
 			KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: usages, DNSNames: dns,
 		}
 		der, createErr := x509.CreateCertificate(rand.Reader, template, ca, key.Public(), caKey)
-		if createErr != nil { t.Fatal(createErr) }
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
 		return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
 	}
 
 	// Agent cert must use the Manager-assigned SPIFFE URI SAN, so issue it
 	// through the real identity issuer rather than hand-building the leaf.
 	_, agentKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: "untrusted"}}, agentKey)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := (identity.Issuer{CA: ca, Signer: caKey}).Issue(csr, testProject, testAgent, time.Hour)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := tls.Certificate{Certificate: [][]byte{result.CertificateDER}, PrivateKey: agentKey}
 
 	roots := x509.NewCertPool()
 	roots.AddCert(ca)
 	return grpcFixture{
-		roots: roots,
+		roots:      roots,
 		serverCert: makeCert(101, "manager", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, []string{"localhost"}),
 		clientCert: client,
 	}
@@ -87,7 +101,7 @@ func registerTestAgentService(server *grpc.Server) {
 		ServiceName: "alpha.v1.AgentTransport",
 		HandlerType: (*agentTransportService)(nil),
 		Streams: []grpc.StreamDesc{{
-			StreamName: "Connect",
+			StreamName:    "Connect",
 			ServerStreams: true,
 			ClientStreams: true,
 			Handler: func(_ any, stream grpc.ServerStream) error {
@@ -137,18 +151,26 @@ func TestGRPCAgentMTLSStreamRevocation(t *testing.T) {
 	fixture := grpcTLSFixture(t)
 	var revoked atomic.Bool
 	statusCheck := func(context.Context, string, string, [32]byte) error {
-		if revoked.Load() { return errors.New("revoked") }
+		if revoked.Load() {
+			return errors.New("revoked")
+		}
 		return nil
 	}
 	auth, err := NewAgentTLSAuthenticator(fixture.roots, statusCheck)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	auth.SessionRecheckInterval = 100 * time.Millisecond
 	options, err := auth.GRPCServerOptions(fixture.serverCert)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := grpc.NewServer(options...)
 	registerTestAgentService(server)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 
@@ -157,9 +179,15 @@ func TestGRPCAgentMTLSStreamRevocation(t *testing.T) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(ProjectMetadataKey, testProject))
 	stream, err := openAgentStream(ctx, conn)
-	if err != nil { t.Fatal(err) }
-	if err = stream.SendMsg(&emptypb.Empty{}); err != nil { t.Fatal(err) }
-	if err = stream.RecvMsg(&emptypb.Empty{}); err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = stream.SendMsg(&emptypb.Empty{}); err != nil {
+		t.Fatal(err)
+	}
+	if err = stream.RecvMsg(&emptypb.Empty{}); err != nil {
+		t.Fatal(err)
+	}
 
 	revoked.Store(true)
 	deadline := time.Now().Add(time.Second)
@@ -181,13 +209,19 @@ func TestGRPCAgentMTLSStreamRevocation(t *testing.T) {
 func TestGRPCAgentRejectsWrongProjectAndMissingCertificate(t *testing.T) {
 	fixture := grpcTLSFixture(t)
 	auth, err := NewAgentTLSAuthenticator(fixture.roots, func(context.Context, string, string, [32]byte) error { return nil })
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	options, err := auth.GRPCServerOptions(fixture.serverCert)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := grpc.NewServer(options...)
 	registerTestAgentService(server)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 
