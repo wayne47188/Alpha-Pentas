@@ -8,6 +8,7 @@ from pathlib import Path
 RESULT_PATH = Path("/tmp/go-integration.json")
 
 REQUIRED = {
+    "TestPostgresConnectionLossDuringSigningRecoversAfterLease",
     "TestPostgresOperatorMTLSIntegration",
     "TestPostgresOperatorDenialAudit",
     "TestPostgresOperatorCertificateIdentity",
