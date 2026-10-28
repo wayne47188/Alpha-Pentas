@@ -13,10 +13,11 @@ import (
 var ErrAgentTLS = errors.New("agent TLS identity rejected")
 
 type AgentTLSAuthenticator struct {
-	Roots            *x509.CertPool
-	Status           identity.CertificateStatus
-	HandshakeTimeout time.Duration
-	Now              func() time.Time
+	Roots                  *x509.CertPool
+	Status                 identity.CertificateStatus
+	HandshakeTimeout       time.Duration
+	SessionRecheckInterval time.Duration
+	Now                    func() time.Time
 }
 
 func NewAgentTLSAuthenticator(roots *x509.CertPool, status identity.CertificateStatus) (AgentTLSAuthenticator, error) {
@@ -24,10 +25,11 @@ func NewAgentTLSAuthenticator(roots *x509.CertPool, status identity.CertificateS
 		return AgentTLSAuthenticator{}, ErrAgentTLS
 	}
 	return AgentTLSAuthenticator{
-		Roots:            roots,
-		Status:           status,
-		HandshakeTimeout: 3 * time.Second,
-		Now:              time.Now,
+		Roots:                  roots,
+		Status:                 status,
+		HandshakeTimeout:       3 * time.Second,
+		SessionRecheckInterval: 5 * time.Second,
+		Now:                    time.Now,
 	}, nil
 }
 
@@ -82,4 +84,39 @@ func (a AgentTLSAuthenticator) AuthorizeProject(ctx context.Context, state tls.C
 		return "", ErrAgentTLS
 	}
 	return peer.AgentID, nil
+}
+
+
+// WatchSession actively invalidates an established transport session after
+// certificate revocation, Agent suspension, project suspension or expiry.
+// A gRPC stream should pass its context cancel function here after handshake.
+func (a AgentTLSAuthenticator) WatchSession(ctx context.Context, peer identity.AgentPeer, cancel context.CancelFunc) error {
+	if a.Status == nil || cancel == nil || peer.ProjectID == "" || peer.AgentID == "" ||
+		peer.Fingerprint == ([32]byte{}) || a.SessionRecheckInterval < 100*time.Millisecond ||
+		a.SessionRecheckInterval > time.Minute {
+		return ErrAgentTLS
+	}
+	if err := a.Status(ctx, peer.ProjectID, peer.AgentID, peer.Fingerprint); err != nil {
+		cancel()
+		return errors.Join(ErrAgentTLS, err)
+	}
+	go func() {
+		ticker := time.NewTicker(a.SessionRecheckInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				checkCtx, stop := context.WithTimeout(context.Background(), a.HandshakeTimeout)
+				err := a.Status(checkCtx, peer.ProjectID, peer.AgentID, peer.Fingerprint)
+				stop()
+				if err != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return nil
 }
