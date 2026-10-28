@@ -15,6 +15,7 @@ class VerifyEvidenceTests(unittest.TestCase):
 
     def test_complete(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
             {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
@@ -26,6 +27,7 @@ class VerifyEvidenceTests(unittest.TestCase):
 
     def test_skipped_fails(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "skip"},
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
@@ -36,12 +38,14 @@ class VerifyEvidenceTests(unittest.TestCase):
 
     def test_missing_fails(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
             {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
         ]), 1)
 
     def test_duplicate_fails(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
             {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
             {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
