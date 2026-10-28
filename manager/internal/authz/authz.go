@@ -27,14 +27,14 @@ type Scope struct {
 	Action    Action
 }
 
-// GrantStore retrieves scoped grants from the authoritative authorization
-// source. It must fail closed when the source is unavailable.
-type GrantStore interface {
-	HasGrant(context.Context, string, string, string, Action) (bool, error)
+// GrantChecker checks scoped grants from the authoritative authorization source.
+// It must fail closed when the source is unavailable.
+type GrantChecker interface {
+	CheckGrant(context.Context, string, string, string, Action) (bool, error)
 }
 
 type Authorizer struct {
-	Grants GrantStore
+	Grants GrantChecker
 }
 
 // Check always binds principal, tenant, project and operation together.
@@ -51,7 +51,7 @@ func (a Authorizer) Check(ctx context.Context, principal Principal, scope Scope)
 	default:
 		return ErrForbidden
 	}
-	ok, err := a.Grants.HasGrant(ctx, principal.ID, scope.TenantID, scope.ProjectID, scope.Action)
+	ok, err := a.Grants.CheckGrant(ctx, principal.ID, scope.TenantID, scope.ProjectID, scope.Action)
 	if err != nil || !ok {
 		return ErrForbidden
 	}
