@@ -43,7 +43,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: alpha
-          POSTGRES_PASSWORD: alpha_ci_only
+          POSTGRES_HOST_AUTH_METHOD: trust # isolated ephemeral CI service only
           POSTGRES_DB: alpha_ci
         ports: ['5432:5432']
         options: >-
@@ -52,7 +52,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://alpha:alpha_ci_only@127.0.0.1:5432/alpha_ci?sslmode=disable
+      DATABASE_URL: postgresql://alpha@127.0.0.1:5432/alpha_ci?sslmode=disable
       ALPHA_TEST_DATABASE_URL: postgresql://alpha:alpha_ci_only@127.0.0.1:5432/alpha_ci?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -70,7 +70,7 @@ jobs:
         run: |
           set -o pipefail
           go test -json -count=1 -timeout=90s ./manager/internal/enrollment ./manager/internal/authz -run '^TestPostgres' | tee /tmp/go-integration.json
-          python3 tools/verify_test_results.py /tmp/go-integration.json
+          python3 tools/verify_test_results.py
       - name: Ensure PostgreSQL tests did not modify tracked files
         run: git diff --exit-code
   console:
