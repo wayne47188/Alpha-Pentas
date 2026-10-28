@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	// Register lib/pq with database/sql for PostgreSQL integration tests.
 	_ "github.com/lib/pq"
 )
 
