@@ -58,3 +58,37 @@ func TestVerifyAgentPeerRejectsWrongScopeAndExpiry(t *testing.T) {
 		t.Fatalf("untrusted CA allowed: %v", err)
 	}
 }
+
+
+func TestVerifyAgentPeerCARotationOverlap(t *testing.T) {
+	oldIssuer, oldCSR := fixture(t)
+	newIssuer, newCSR := fixture(t)
+	oldIssued, err := oldIssuer.Issue(oldCSR, project, agent, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newIssued, err := newIssuer.Issue(newCSR, project, agent, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := func(context.Context, string, string, [32]byte) error { return nil }
+
+	overlap := x509.NewCertPool()
+	overlap.AddCert(oldIssuer.CA)
+	overlap.AddCert(newIssuer.CA)
+	if _, err = VerifyAgentCertificate(context.Background(), oldIssued.CertificateDER, overlap, time.Now(), status); err != nil {
+		t.Fatalf("old CA rejected during overlap: %v", err)
+	}
+	if _, err = VerifyAgentCertificate(context.Background(), newIssued.CertificateDER, overlap, time.Now(), status); err != nil {
+		t.Fatalf("new CA rejected during overlap: %v", err)
+	}
+
+	newOnly := x509.NewCertPool()
+	newOnly.AddCert(newIssuer.CA)
+	if _, err = VerifyAgentCertificate(context.Background(), oldIssued.CertificateDER, newOnly, time.Now(), status); !errors.Is(err, ErrPeerIdentity) {
+		t.Fatalf("old CA remained trusted after rotation: %v", err)
+	}
+	if _, err = VerifyAgentCertificate(context.Background(), newIssued.CertificateDER, newOnly, time.Now(), status); err != nil {
+		t.Fatalf("new CA rejected after rotation: %v", err)
+	}
+}
