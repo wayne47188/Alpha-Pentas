@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	// Register lib/pq with database/sql for PostgreSQL integration tests.
 	_ "github.com/lib/pq"
 	"github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
 )
@@ -42,7 +43,7 @@ func TestPostgresCertificateRevocationEnforced(t *testing.T) {
 	if err = store.Claim(ctx, token, project, agent, claim, csr); err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.IssueClaim(ctx, claim, project, randomUUID(t), "CA-test", token, csr, issuer)
+	result, err := store.IssueClaim(ctx, IssueRequest{ClaimID: claim, ProjectID: project, CertificateID: randomUUID(t), IssuerKeyID: "CA-test", EnrollmentToken: token, CSRDER: csr}, issuer)
 	if err != nil {
 		t.Fatal(err)
 	}

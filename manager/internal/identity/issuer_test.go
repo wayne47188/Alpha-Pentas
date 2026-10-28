@@ -1,10 +1,14 @@
 package identity
 
 import (
+	"context"
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
+	"io"
 	"math/big"
 	"net/url"
 	"testing"
@@ -40,6 +44,7 @@ func fixture(t *testing.T) (Issuer, []byte) {
 	}
 	return Issuer{CA: ca, Signer: caKey}, csrDER
 }
+
 func TestIssueAgentIdentity(t *testing.T) {
 	issuer, csr := fixture(t)
 	got, err := issuer.Issue(csr, project, agent, 7*24*time.Hour)
@@ -63,6 +68,54 @@ func TestIssueAgentIdentity(t *testing.T) {
 		t.Fatal("overprivileged certificate")
 	}
 }
+
+type contextAwareSigner struct {
+	crypto.Signer
+	called chan struct{}
+}
+
+func (s *contextAwareSigner) Sign(io.Reader, []byte, crypto.SignerOpts) ([]byte, error) {
+	return nil, errors.New("legacy signer path used")
+}
+
+func (s *contextAwareSigner) SignContext(ctx context.Context, random io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	select {
+	case <-s.called:
+	default:
+		close(s.called)
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		return nil, errors.New("missing signer deadline")
+	}
+	return s.Signer.Sign(random, digest, opts)
+}
+
+func TestIssueContextUsesContextAwareSigner(t *testing.T) {
+	issuer, csr := fixture(t)
+	wrapped := &contextAwareSigner{Signer: issuer.Signer, called: make(chan struct{})}
+	issuer.Signer = wrapped
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := issuer.IssueContext(ctx, csr, project, agent, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-wrapped.called:
+	default:
+		t.Fatal("context-aware signer was bypassed")
+	}
+}
+
+func TestIssueContextRejectsCancelledRequest(t *testing.T) {
+	issuer, csr := fixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := issuer.IssueContext(ctx, csr, project, agent, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled issuance returned %v", err)
+	}
+}
+
 func TestRejectBadCSRAndSAN(t *testing.T) {
 	issuer, csr := fixture(t)
 	csr[len(csr)-1] ^= 1
@@ -79,6 +132,7 @@ func TestRejectBadCSRAndSAN(t *testing.T) {
 		t.Fatal("untrusted SAN accepted")
 	}
 }
+
 func TestRejectInvalidIdentity(t *testing.T) {
 	issuer, csr := fixture(t)
 	if _, err := issuer.Issue(csr, "not-uuid", agent, time.Hour); err == nil {

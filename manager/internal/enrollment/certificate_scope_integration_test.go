@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	// Register lib/pq with database/sql for PostgreSQL integration tests.
 	_ "github.com/lib/pq"
 )
 
@@ -41,7 +42,7 @@ func TestPostgresCertificateScopeAndSuspension(t *testing.T) {
 	if err = store.Claim(ctx, token, project, agent, claim, csr); err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.IssueClaim(ctx, claim, project, randomUUID(t), "test-CA", token, csr, issuer)
+	result, err := store.IssueClaim(ctx, IssueRequest{ClaimID: claim, ProjectID: project, CertificateID: randomUUID(t), IssuerKeyID: "test-CA", EnrollmentToken: token, CSRDER: csr}, issuer)
 	if err != nil {
 		t.Fatal(err)
 	}

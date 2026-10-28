@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Fail CI when required Go integration tests are absent, skipped, or failed.
+"""Fail CI when required Go integration tests are absent, skipped, or failed."""
 
-Reads go test -json output, including multiple packages. This checker is
-intentionally independent of production Go implementation.
-"""
 import json
 import sys
 from pathlib import Path
 
+RESULT_PATH = Path("/tmp/go-integration.json")
+
 REQUIRED = {
+    "TestPostgresAgentGRPCMTLSIntegration",
+    "TestDockerPostgresServerRestartDuringSigningRecovers",
+    "TestPostgresConnectionLossDuringSigningRecoversAfterLease",
+    "TestPostgresOperatorMTLSIntegration",
+    "TestPostgresOperatorDenialAudit",
+    "TestPostgresOperatorCertificateIdentity",
+    "TestPostgresOperatorGrantRevocationAndIsolation",
     "TestPostgresEnrollmentLifecycle",
     "TestPostgresSigningDoesNotHoldRowLock",
     "TestPostgresExpiredLeaseFencesStaleSigner",
@@ -17,11 +23,9 @@ REQUIRED = {
     "TestPostgresSigningFailureReleasesLease",
 }
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: verify_test_results.py <go-test-json>", file=sys.stderr)
-        return 2
-    path = Path(sys.argv[1])
+
+def verify(path: Path) -> int:
+    """Validate a trusted CI-produced go test -json evidence file."""
     outcomes = {}
     try:
         with path.open(encoding="utf-8") as source:
@@ -47,6 +51,11 @@ def main() -> int:
         return 1
     print("Verified required Go PostgreSQL integration tests executed and passed.")
     return 0
+
+
+def main() -> int:
+    return verify(RESULT_PATH)
+
 
 if __name__ == "__main__":
     sys.exit(main())

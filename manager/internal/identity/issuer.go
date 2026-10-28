@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -12,6 +13,7 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/url"
 	"regexp"
@@ -20,6 +22,13 @@ import (
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 var ErrCSR = errors.New("invalid agent CSR")
+
+// ContextSigner is implemented by remote KMS/HSM adapters that can abort
+// signing when the request context is cancelled or reaches its deadline.
+type ContextSigner interface {
+	crypto.Signer
+	SignContext(context.Context, io.Reader, []byte, crypto.SignerOpts) ([]byte, error)
+}
 
 // Issuer accepts a previously provisioned CA certificate and signer.
 // CA private keys are never created or stored in the Agent.
@@ -45,36 +54,46 @@ func ValidateCSR(der []byte) (*x509.CertificateRequest, error) {
 	if err != nil || csr.CheckSignature() != nil {
 		return nil, ErrCSR
 	}
-	switch k := csr.PublicKey.(type) {
-	case ed25519.PublicKey:
-		if len(k) != ed25519.PublicKeySize {
-			return nil, ErrCSR
-		}
-	case *ecdsa.PublicKey:
-		if k.Curve == nil || k.Curve.Params().BitSize < 256 {
-			return nil, ErrCSR
-		}
-	case *rsa.PublicKey:
-		if k.N.BitLen() < 2048 {
-			return nil, ErrCSR
-		}
-	default:
-		return nil, ErrCSR
-	}
-	// The manager alone assigns the identity SAN.
-	for _, ext := range csr.Extensions {
-		if ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) {
-			return nil, ErrCSR
-		}
-	}
-	if len(csr.DNSNames) != 0 || len(csr.IPAddresses) != 0 || len(csr.URIs) != 0 || len(csr.EmailAddresses) != 0 {
+	if !supportedCSRKey(csr.PublicKey) || requestsIdentitySAN(csr) {
 		return nil, ErrCSR
 	}
 	return csr, nil
 }
 
+func supportedCSRKey(publicKey any) bool {
+	switch key := publicKey.(type) {
+	case ed25519.PublicKey:
+		return len(key) == ed25519.PublicKeySize
+	case *ecdsa.PublicKey:
+		return key.Curve != nil && key.Curve.Params().BitSize >= 256
+	case *rsa.PublicKey:
+		return key.N != nil && key.N.BitLen() >= 2048
+	default:
+		return false
+	}
+}
+
+func requestsIdentitySAN(csr *x509.CertificateRequest) bool {
+	for _, ext := range csr.Extensions {
+		if ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) {
+			return true
+		}
+	}
+	return len(csr.DNSNames) != 0 ||
+		len(csr.IPAddresses) != 0 ||
+		len(csr.URIs) != 0 ||
+		len(csr.EmailAddresses) != 0
+}
+
 func (i Issuer) Issue(csrDER []byte, projectID, agentID string, validFor time.Duration) (Result, error) {
+	return i.IssueContext(context.Background(), csrDER, projectID, agentID, validFor)
+}
+
+func (i Issuer) IssueContext(ctx context.Context, csrDER []byte, projectID, agentID string, validFor time.Duration) (Result, error) {
 	var out Result
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
 	if !uuidRE.MatchString(projectID) || !uuidRE.MatchString(agentID) || validFor <= 0 || validFor > 7*24*time.Hour {
 		return out, errors.New("invalid identity or certificate lifetime")
 	}
@@ -108,13 +127,41 @@ func (i Issuer) Issue(csrDER []byte, projectID, agentID string, validFor time.Du
 	if err != nil {
 		return out, err
 	}
-	tmpl := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: agentID}, NotBefore: notBefore, NotAfter: notAfter, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, BasicConstraintsValid: true, URIs: []*url.URL{uri}}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, i.CA, csr.PublicKey, i.Signer)
+	tmpl := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: agentID},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		URIs:                  []*url.URL{uri},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, i.CA, csr.PublicKey, contextBoundSigner{ctx: ctx, signer: i.Signer})
 	if err != nil {
 		return out, err
 	}
 	out = Result{CertificateDER: der, Serial: serial.String(), Fingerprint: sha256.Sum256(der), NotAfter: notAfter, IdentityURI: uri.String()}
 	return out, nil
+}
+
+type contextBoundSigner struct {
+	ctx    context.Context
+	signer crypto.Signer
+}
+
+func (s contextBoundSigner) Public() crypto.PublicKey {
+	return s.signer.Public()
+}
+
+func (s contextBoundSigner) Sign(random io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	if err := s.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if contextual, ok := s.signer.(ContextSigner); ok {
+		return contextual.SignContext(s.ctx, random, digest, opts)
+	}
+	return s.signer.Sign(random, digest, opts)
 }
 
 func publicKeysEqual(a, b any) bool {

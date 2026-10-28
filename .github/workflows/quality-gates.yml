@@ -5,11 +5,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   go:
     name: Go / format, vet, test
@@ -34,16 +37,17 @@ jobs:
         run: go test -race -count=1 ./...
       - name: Ensure Go checks did not modify tracked files
         run: git diff --exit-code
+
   postgres:
     name: PostgreSQL / schema invariants and Go integration
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_USER: alpha
-          POSTGRES_PASSWORD: alpha_ci_only
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
           POSTGRES_DB: alpha_ci
         ports: ['5432:5432']
         options: >-
@@ -52,8 +56,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://alpha:alpha_ci_only@127.0.0.1:5432/alpha_ci?sslmode=disable
-      ALPHA_TEST_DATABASE_URL: postgresql://alpha:alpha_ci_only@127.0.0.1:5432/alpha_ci?sslmode=disable
+      DATABASE_URL: postgresql://alpha:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/alpha_ci?sslmode=disable
+      ALPHA_TEST_DATABASE_URL: postgresql://alpha:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/alpha_ci?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -66,13 +70,45 @@ jobs:
         run: bash tests/integration/enrollment_postgres.sh
       - name: Verify test-evidence checker behavior
         run: python3 -m unittest discover -s tools -p 'test_verify_test_results.py' -v
-      - name: Run Go PostgreSQL enrollment integration (evidence required)
+      - name: Run PostgreSQL application integration and restart recovery
         run: |
           set -o pipefail
-          go test -json -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestPostgres' | tee /tmp/go-integration.json
-          python3 tools/verify_test_results.py /tmp/go-integration.json
+          go test -json -count=1 -timeout=90s             ./manager/internal/enrollment             ./manager/internal/authz             ./manager/internal/operator             ./manager/cmd/manager             -run '^TestPostgres' | tee /tmp/go-integration.json
+
+          postgres_container="$(docker ps --filter ancestor=postgres:16 --format '{{.ID}}' | head -n1)"
+          test -n "$postgres_container"
+
+          ALPHA_TEST_POSTGRES_CONTAINER="$postgres_container"             go test -json -count=1 -timeout=90s             ./manager/internal/enrollment             -run '^TestDockerPostgresServerRestartDuringSigningRecovers$'             | tee -a /tmp/go-integration.json
+
+          python3 tools/verify_test_results.py
       - name: Ensure PostgreSQL tests did not modify tracked files
         run: git diff --exit-code
+
+  dependencies:
+    name: Dependencies / vulnerability audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Go reachable vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@e672cbe8fbc8c76e28fcb6db0efd9ce354e0dac5 ./...
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Audit production npm dependencies
+        working-directory: console
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm audit --omit=dev --audit-level=high
+      - name: Ensure dependency checks did not modify tracked files
+        run: git diff --exit-code
+
   console:
     name: Console / typecheck and build
     runs-on: ubuntu-latest
@@ -93,6 +129,7 @@ jobs:
         run: npm run build
       - name: Ensure frontend checks did not modify tracked files
         run: git diff --exit-code
+
   security:
     name: Supply chain / secret scan
     runs-on: ubuntu-latest

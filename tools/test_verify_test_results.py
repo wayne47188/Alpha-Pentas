@@ -3,8 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from verify_test_results import main
-from unittest.mock import patch
+from verify_test_results import verify
 
 
 class VerifyEvidenceTests(unittest.TestCase):
@@ -12,11 +11,17 @@ class VerifyEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / "results.json"
             output.write_text("\n".join(json.dumps(item) for item in events), encoding="utf-8")
-            with patch("sys.argv", ["verify_test_results.py", str(output)]):
-                return main()
+            return verify(output)
 
     def test_complete(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresAgentGRPCMTLSIntegration", "Action": "pass"},
+            {"Test": "TestDockerPostgresServerRestartDuringSigningRecovers", "Action": "pass"},
+            {"Test": "TestPostgresConnectionLossDuringSigningRecoversAfterLease", "Action": "pass"},
+            {"Test": "TestPostgresOperatorMTLSIntegration", "Action": "pass"},
+            {"Test": "TestPostgresOperatorDenialAudit", "Action": "pass"},
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
+            {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
@@ -27,6 +32,7 @@ class VerifyEvidenceTests(unittest.TestCase):
 
     def test_skipped_fails(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "skip"},
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
@@ -37,12 +43,17 @@ class VerifyEvidenceTests(unittest.TestCase):
 
     def test_missing_fails(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
+            {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
         ]), 1)
 
     def test_duplicate_fails(self):
         self.assertEqual(self.check([
+            {"Test": "TestPostgresOperatorCertificateIdentity", "Action": "pass"},
+            {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
+            {"Test": "TestPostgresOperatorGrantRevocationAndIsolation", "Action": "pass"},
             {"Test": "TestPostgresEnrollmentLifecycle", "Action": "pass"},
             {"Test": "TestPostgresSigningDoesNotHoldRowLock", "Action": "pass"},
             {"Test": "TestPostgresExpiredLeaseFencesStaleSigner", "Action": "pass"},
