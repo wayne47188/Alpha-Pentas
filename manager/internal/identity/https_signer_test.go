@@ -59,10 +59,18 @@ func TestHTTPSignerHonorsCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	release := make(chan struct{})
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
 	}))
-	defer server.Close()
+	t.Cleanup(func() {
+		close(release)
+		server.CloseClientConnections()
+		server.Close()
+	})
 
 	signer, err := NewHTTPSigner(server.URL, public, server.Client())
 	if err != nil {
