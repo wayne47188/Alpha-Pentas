@@ -69,7 +69,7 @@ jobs:
       - name: Run Go PostgreSQL enrollment integration (evidence required)
         run: |
           set -o pipefail
-          go test -json -count=1 -timeout=90s ./manager/internal/enrollment ./manager/internal/authz ./manager/internal/operator -run '^TestPostgres' | tee /tmp/go-integration.json
+          go test -json -count=1 -timeout=90s ./manager/internal/enrollment ./manager/internal/authz ./manager/internal/operator ./manager/cmd/manager -run '^TestPostgres' | tee /tmp/go-integration.json
           python3 tools/verify_test_results.py
       - name: Ensure PostgreSQL tests did not modify tracked files
         run: git diff --exit-code
