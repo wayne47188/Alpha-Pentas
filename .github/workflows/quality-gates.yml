@@ -70,6 +70,45 @@ jobs:
         run: |
           set -o pipefail
           go test -json -count=1 -timeout=90s ./manager/internal/enrollment ./manager/internal/authz ./manager/internal/operator ./manager/cmd/manager -run '^TestPostgres' | tee /tmp/go-integration.json
+          postgres_container="$(docker ps --filter ancestor=postgres:16 --format '{{.ID}}' | head -n1)"
+          test -n "$postgres_container"
+          ALPHA_TEST_POSTGRES_CONTAINER="$postgres_container" \
+            go test -json -count=1 -timeout=90s ./manager/internal/enrollment -run '^TestDockerPostgresServerRestartDuringSigningRecovers
+      - name: Ensure PostgreSQL tests did not modify tracked files
+        run: git diff --exit-code
+  console:
+    name: Console / typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: console
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck and build
+        run: npm run build
+      - name: Ensure frontend checks did not modify tracked files
+        run: git diff --exit-code
+  security:
+    name: Supply chain / secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ | tee -a /tmp/go-integration.json
           python3 tools/verify_test_results.py
       - name: Ensure PostgreSQL tests did not modify tracked files
         run: git diff --exit-code
