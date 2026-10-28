@@ -43,7 +43,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: alpha
-          POSTGRES_HOST_AUTH_METHOD: trust # isolated ephemeral CI service only
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
           POSTGRES_DB: alpha_ci
         ports: ['5432:5432']
         options: >-
@@ -52,8 +52,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://alpha@127.0.0.1:5432/alpha_ci?sslmode=disable
-      ALPHA_TEST_DATABASE_URL: postgresql://alpha@127.0.0.1:5432/alpha_ci?sslmode=disable
+      DATABASE_URL: postgresql://alpha:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/alpha_ci?sslmode=disable
+      ALPHA_TEST_DATABASE_URL: postgresql://alpha:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/alpha_ci?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
