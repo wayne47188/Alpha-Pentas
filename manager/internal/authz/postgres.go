@@ -12,7 +12,7 @@ type PostgresGrants struct {
 	DB *sql.DB
 }
 
-func (g PostgresGrants) HasGrant(ctx context.Context, operatorID, tenantID, projectID string, action Action) (bool, error) {
+func (g PostgresGrants) CheckGrant(ctx context.Context, operatorID, tenantID, projectID string, action Action) (bool, error) {
 	if g.DB == nil {
 		return false, errors.New("grant database unavailable")
 	}
