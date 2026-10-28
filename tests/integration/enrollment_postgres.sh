@@ -11,6 +11,7 @@ psql_safe -f manager/migrations/0001_identity.up.sql >/dev/null
 psql_safe -f manager/migrations/0002_enrollment_claims.up.sql >/dev/null
 psql_safe -f manager/migrations/0003_issued_certificates.up.sql >/dev/null
 psql_safe -f manager/migrations/0004_issuance_lease.up.sql >/dev/null
+psql_safe -f manager/migrations/0005_operator_grants.up.sql >/dev/null
 
 tenant="11111111-1111-4111-8111-111111111111"
 project="22222222-2222-4222-8222-222222222222"
