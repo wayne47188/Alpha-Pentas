@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 REQUIRED = {
+    "TestPostgresOperatorGrantRevocationAndIsolation",
     "TestPostgresEnrollmentLifecycle",
     "TestPostgresSigningDoesNotHoldRowLock",
     "TestPostgresExpiredLeaseFencesStaleSigner",
