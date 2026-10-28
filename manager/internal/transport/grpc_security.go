@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/wayne47188/Alpha-Pentas/manager/internal/identity"
@@ -88,11 +89,34 @@ func (a AgentTLSAuthenticator) StreamServerInterceptor() grpc.StreamServerInterc
 
 		sessionCtx, cancel := context.WithCancel(stream.Context())
 		defer cancel()
-		if err = a.WatchSession(sessionCtx, agentPeer, cancel); err != nil {
+
+		revoked := make(chan struct{})
+		var revokeOnce sync.Once
+		revoke := func() {
+			revokeOnce.Do(func() {
+				close(revoked)
+				cancel()
+			})
+		}
+		if err = a.WatchSession(sessionCtx, agentPeer, revoke); err != nil {
 			return status.Error(codes.Unauthenticated, "agent session rejected")
 		}
 		sessionCtx = context.WithValue(sessionCtx, agentPeerContextKey{}, agentPeer)
-		return handler(srv, contextServerStream{ServerStream: stream, ctx: sessionCtx})
+		wrapped := contextServerStream{ServerStream: stream, ctx: sessionCtx}
+
+		handlerDone := make(chan error, 1)
+		go func() {
+			handlerDone <- handler(srv, wrapped)
+		}()
+
+		select {
+		case handlerErr := <-handlerDone:
+			return handlerErr
+		case <-revoked:
+			return status.Error(codes.Unauthenticated, "agent session revoked")
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
 	}
 }
 
