@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"errors"
+	"reflect"
 )
 
 var ErrForbidden = errors.New("operation not authorized")
@@ -41,7 +42,7 @@ type Authorizer struct {
 // Do not trust tenant/project from client-controlled headers or JWT role text
 // without independently verifying an authenticated principal.
 func (a Authorizer) Check(ctx context.Context, principal Principal, scope Scope) error {
-	if a.Grants == nil || !principal.Authenticated || principal.ID == "" ||
+	if !grantCheckerAvailable(a.Grants) || !principal.Authenticated || principal.ID == "" ||
 		principal.TenantID == "" || scope.TenantID == "" ||
 		scope.ProjectID == "" || principal.TenantID != scope.TenantID {
 		return ErrForbidden
@@ -56,4 +57,18 @@ func (a Authorizer) Check(ctx context.Context, principal Principal, scope Scope)
 		return ErrForbidden
 	}
 	return nil
+}
+
+
+func grantCheckerAvailable(checker GrantChecker) bool {
+	if checker == nil {
+		return false
+	}
+	value := reflect.ValueOf(checker)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return !value.IsNil()
+	default:
+		return true
+	}
 }
