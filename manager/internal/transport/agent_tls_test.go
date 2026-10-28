@@ -30,7 +30,7 @@ func agentTLSFixture(t *testing.T) (*x509.CertPool, *x509.Certificate) {
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "Agent Test CA"},
 		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(time.Hour),
+		NotAfter:              now.Add(2 * time.Hour),
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 		KeyUsage:              x509.KeyUsageCertSign,
