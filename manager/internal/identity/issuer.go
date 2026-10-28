@@ -45,32 +45,35 @@ func ValidateCSR(der []byte) (*x509.CertificateRequest, error) {
 	if err != nil || csr.CheckSignature() != nil {
 		return nil, ErrCSR
 	}
-	switch k := csr.PublicKey.(type) {
-	case ed25519.PublicKey:
-		if len(k) != ed25519.PublicKeySize {
-			return nil, ErrCSR
-		}
-	case *ecdsa.PublicKey:
-		if k.Curve == nil || k.Curve.Params().BitSize < 256 {
-			return nil, ErrCSR
-		}
-	case *rsa.PublicKey:
-		if k.N.BitLen() < 2048 {
-			return nil, ErrCSR
-		}
-	default:
-		return nil, ErrCSR
-	}
-	// The manager alone assigns the identity SAN.
-	for _, ext := range csr.Extensions {
-		if ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) {
-			return nil, ErrCSR
-		}
-	}
-	if len(csr.DNSNames) != 0 || len(csr.IPAddresses) != 0 || len(csr.URIs) != 0 || len(csr.EmailAddresses) != 0 {
+	if !supportedCSRKey(csr.PublicKey) || requestsIdentitySAN(csr) {
 		return nil, ErrCSR
 	}
 	return csr, nil
+}
+
+func supportedCSRKey(publicKey any) bool {
+	switch key := publicKey.(type) {
+	case ed25519.PublicKey:
+		return len(key) == ed25519.PublicKeySize
+	case *ecdsa.PublicKey:
+		return key.Curve != nil && key.Curve.Params().BitSize >= 256
+	case *rsa.PublicKey:
+		return key.N != nil && key.N.BitLen() >= 2048
+	default:
+		return false
+	}
+}
+
+func requestsIdentitySAN(csr *x509.CertificateRequest) bool {
+	for _, ext := range csr.Extensions {
+		if ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) {
+			return true
+		}
+	}
+	return len(csr.DNSNames) != 0 ||
+		len(csr.IPAddresses) != 0 ||
+		len(csr.URIs) != 0 ||
+		len(csr.EmailAddresses) != 0
 }
 
 func (i Issuer) Issue(csrDER []byte, projectID, agentID string, validFor time.Duration) (Result, error) {
