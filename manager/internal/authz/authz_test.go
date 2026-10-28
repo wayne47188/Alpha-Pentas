@@ -12,7 +12,7 @@ type stubGrants struct {
 	calls int
 }
 
-func (s *stubGrants) HasGrant(_ context.Context, _, _, _ string, _ Action) (bool, error) {
+func (s *stubGrants) CheckGrant(_ context.Context, _, _, _ string, _ Action) (bool, error) {
 	s.calls++
 	return s.allow, s.err
 }
