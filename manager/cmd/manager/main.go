@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 func newHandler() http.Handler {
@@ -53,21 +56,51 @@ func run(ctx context.Context) error {
 		defer db.Close()
 	}
 
-	errCh := make(chan error, 2)
+	agentCfg, agentEnabled, err := agentGRPCConfigFromEnv()
+	if err != nil {
+		return err
+	}
+	var agentServer *grpc.Server
+	var agentListener net.Listener
+	if agentEnabled {
+		builtServer, db, buildErr := newAgentGRPCServer(ctx, agentCfg)
+		if buildErr != nil {
+			return buildErr
+		}
+		agentServer = builtServer
+		defer db.Close()
+
+		agentListener, err = net.Listen("tcp", agentCfg.Addr)
+		if err != nil {
+			return err
+		}
+		defer agentListener.Close()
+	}
+
+	errCh := make(chan error, 3)
 	go func() {
 		log.Printf("Alpha Pentas Manager health listener on %s", addr)
-		err := healthServer.ListenAndServe()
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+		serveErr := healthServer.ListenAndServe()
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			errCh <- serveErr
 		}
 	}()
 
 	if operatorEnabled {
 		go func() {
 			log.Printf("Alpha Pentas Manager operator mTLS listener on %s", operatorCfg.Addr)
-			err := operatorServer.ListenAndServeTLS("", "")
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				errCh <- err
+			serveErr := operatorServer.ListenAndServeTLS("", "")
+			if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+				errCh <- serveErr
+			}
+		}()
+	}
+
+	if agentEnabled {
+		go func() {
+			log.Printf("Alpha Pentas Manager Agent gRPC mTLS listener on %s", agentListener.Addr())
+			if serveErr := agentServer.Serve(agentListener); serveErr != nil {
+				errCh <- serveErr
 			}
 		}()
 	}
@@ -80,10 +113,13 @@ func run(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	healthErr := healthServer.Shutdown(shutdownCtx)
+
 	var operatorErr error
 	if operatorServer != nil {
 		operatorErr = operatorServer.Shutdown(shutdownCtx)
 	}
+	stopGRPCServer(shutdownCtx, agentServer)
+
 	if err != nil {
 		return err
 	}
