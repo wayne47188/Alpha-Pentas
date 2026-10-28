@@ -102,7 +102,6 @@ func TestAuthorizeProjectRejectsCrossProject(t *testing.T) {
 	}
 }
 
-
 func TestWatchSessionCancelsAfterRevocation(t *testing.T) {
 	roots, cert := agentTLSFixture(t)
 	var revoked atomic.Bool
